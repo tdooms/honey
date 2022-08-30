@@ -1,62 +1,83 @@
 use darling::{FromMeta, FromDeriveInput, ast, FromField};
-use syn::{AttributeArgs, ItemFn, parse_macro_input};
-use proc_macro::TokenStream;
+use syn::{AttributeArgs, Field, ItemFn, parse_macro_input};
+use proc_macro2::TokenStream;
+use quote::{quote, ToTokens};
 
-
-#[derive(Debug, Default, Clone, Copy, FromMeta)]
+#[derive(Debug, Default, Clone, FromMeta)]
 #[darling(default)]
-enum Volume {
+enum FormFieldKind {
     #[default]
-    Normal,
-    Whisper,
-    Shout,
+    Input,
+    TextArea,
+    Checkbox,
+    // Custom(Box<dyn Fn()>)
 }
 
-
-#[derive(Debug, FromMeta)]
+#[derive(FromMeta)]
 struct MacroArgs {
-    #[darling(default)]
-    timeout_ms: Option<u16>,
-    path: String,
+    state: Option<String>,
 }
 
-#[derive(Default, FromMeta, Debug)]
-#[darling(default)]
-struct Lorem {
-    #[darling(rename = "sit")]
-    ipsum: bool,
-    dolor: Option<String>,
-}
-
-#[derive(Debug, FromField)]
-#[darling(attributes(my_trait))]
-struct MyFieldReceiver {
+#[derive(FromField)]
+#[darling(attributes(form))]
+struct FieldOpts {
     ident: Option<syn::Ident>,
     ty: syn::Type,
-    volume: Option<Volume>,
+    #[darling(default)]
+    field: FormFieldKind,
 }
 
-#[derive(FromDeriveInput, Debug)]
-#[darling(attributes(my_trait), supports(struct_any))]
-struct MyTraitOpts {
+#[derive(FromDeriveInput)]
+#[darling(attributes(form), supports(struct_any))]
+struct TraitOpts {
     ident: syn::Ident,
-    data: ast::Data<(), MyFieldReceiver>,
-    lorem: Lorem,
+    data: ast::Data<(), FieldOpts>,
+    state: Option<String>,
 }
 
-#[proc_macro_derive(MyTrait, attributes(my_trait))]
-pub fn my_trait(input: TokenStream) -> TokenStream {
-    let opts = MyTraitOpts::from_derive_input(&parse_macro_input!(input)).unwrap();
+#[proc_macro_derive(Form, attributes(form))]
+pub fn my_trait(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let opts = TraitOpts::from_derive_input(&parse_macro_input!(input)).unwrap();
+    opts.to_token_stream().into()
+}
 
-    match opts.data {
-        ast::Data::Struct(fields) => {
-            println!("{:?}", fields.fields[0].volume)
-        },
-        _ => unimplemented!()
+impl ToTokens for FieldOpts {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let ident = self.ident.as_ref().unwrap();
+        let ty = &self.ty;
+
+        let body = match self.field {
+            FormFieldKind::Input => quote!{ <cobul::Input oninput={yew::Callback::noop()} /> },
+            FormFieldKind::TextArea => quote!{ <cobul::Textarea oninput={yew::Callback::noop()} /> },
+            FormFieldKind::Checkbox => quote!{ <cobul::Checkbox id="aargh" label="label" onchange={yew::Callback::noop()} /> }
+        };
+
+        let stream = quote! {
+            <cobul::simple::Field label={stringify!(#ident)}> #body </cobul::simple::Field>
+        };
+
+        tokens.extend(stream)
     }
+}
 
+impl ToTokens for TraitOpts {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let fields = match &self.data {
+            ast::Data::Struct(fields) => &fields.fields,
+            _ => unimplemented!()
+        };
 
-    TokenStream::new()
+        let ident = &self.ident;
+        let stream = quote! {
+            impl #ident {
+                pub fn view(&self) -> yew::Html {
+                    yew::html! { <> #(#fields)* </> }
+                }
+            }
+        };
+
+        tokens.extend(stream)
+    }
 }
 
 // #[proc_macro_attribute]
