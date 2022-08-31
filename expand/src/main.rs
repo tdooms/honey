@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use honey_derive::Form;
 use yew::*;
 
@@ -14,36 +15,49 @@ use yew::*;
 //     html! {<Input blabla>}
 // }
 
-// pub struct QuizState {
-//     pub expanded: UseStateHandle<bool>
-// }
+pub struct QuizState {
+    pub expanded: UseStateHandle<bool>
+}
 
-#[derive(Form)]
+#[function_component(ImageInput)]
+pub fn image_input(props: &CustomProps) -> Html {
+    html! {<p> {"unpit"} </p>}
+}
+
+#[derive(Form, PartialEq, Clone, Debug)]
 pub struct Quiz {
-    #[form(field = "input")]
+    #[form(input)]
     pub title: String,
 
-    #[form(field = "checkbox")]
-    pub public: String,
+    #[form(checkbox)]
+    pub public: bool,
 
-    // #[field(custom("image_field"))]
-    // pub image: String,
+    #[form(custom = "image_input")]
+    pub image: Option<String>,
 }
 
 #[function_component(App)]
 pub fn app() -> Html {
     let quiz = Quiz {
         title: "title".to_string(),
-        public: "public".to_string(),
+        public: true,
+        image: None
     };
+
+    let state = use_state(|| Rc::new(quiz));
+    let change = ywt::callback!(state; move |quiz| state.set(quiz));
+
+    let debug = format!("{:?}", &*state);
 
     html! {
         <cobul::Container>
-        { quiz.view() }
+        <QuizForm value={(*state).clone()} {change} />
+        <p> {debug} </p>
         </cobul::Container>
     }
 }
-
 fn main() {
-    yew::Renderer::<App>::new().render();
+    Renderer::<App>::new().render();
 }
+
+// fn main() {}
