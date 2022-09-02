@@ -10,7 +10,7 @@ struct MacroArgs {
     state: Option<String>,
 }
 
-#[derive(FromField)]
+#[derive(FromField, Clone)]
 #[darling(attributes(form))]
 struct FieldOpts {
     ident: Option<syn::Ident>,
@@ -18,6 +18,9 @@ struct FieldOpts {
 
     #[darling(default)]
     custom: Option<String>,
+
+    #[darling(default)]
+    hidden: bool,
 
     #[darling(default)]
     checkbox: bool,
@@ -35,6 +38,12 @@ struct TraitOpts {
     ident: syn::Ident,
     data: ast::Data<(), FieldOpts>,
     state: Option<String>,
+
+    #[darling(default)]
+    submit: bool,
+
+    #[darling(default)]
+    cancel: bool
 }
 
 #[proc_macro_derive(Form, attributes(form))]
@@ -45,38 +54,41 @@ pub fn my_trait(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 impl ToTokens for FieldOpts {
     fn to_tokens(&self, tokens: &mut TokenStream) {
+        let Self { ty, custom, hidden, checkbox, input, textarea, .. } = self.clone();
         let ident = self.ident.as_ref().unwrap();
 
         // Check whether the types are supported
-        if self.checkbox && self.ty != syn::parse_str("bool").unwrap() {
-            println!("{:?} {:?}", self.ty, syn::parse_str::<syn::Ident>("bool").unwrap());
+        if checkbox && ty != syn::parse_str("bool").unwrap() {
+            // println!("{:?} {:?}", self.ty, syn::parse_str::<syn::Ident>("bool").unwrap());
             // compile_error!("Checkbox field can only be used with bool");
         }
-        if self.input && self.ty != syn::parse_str("String").unwrap() {
+        if input && ty != syn::parse_str("String").unwrap() {
             // compile_error!("Input field can only be used with String");
         }
-        if self.textarea && self.ty != syn::parse_str("String").unwrap() {
+        if textarea && ty != syn::parse_str("String").unwrap() {
             // compile_error!("Textarea field can only be used with String");
         }
 
         let callback_ident = syn::Ident::new(&format!("{}_cb", ident), ident.span());
 
-        let body = match (self.checkbox, self.input, self.textarea, &self.custom) {
-            (true, false, false, None) => quote! {
+        let body = match (hidden, checkbox, input, textarea, &custom) {
+            (true, false, false, false, None) => quote! {},
+            (false, true, false, false, None) => quote! {
                 <cobul::Checkbox input={#callback_ident} checked={#ident} label={stringify!(#ident)} />
             },
-            (false, true, false, None) => quote! {
+            (false, false, true, false, None) => quote! {
                 <cobul::Input input={#callback_ident} value={#ident} />
             },
-            (false, false, true, None) => quote! {
+            (false, false, false, true, None) => quote! {
                 <cobul::Textarea input={#callback_ident} value={#ident} />
             },
-            (false, false, false, Some(custom)) => {
+            (false, false, false, false, Some(custom)) => {
                 let elem_ident = syn::Ident::new(&custom.to_case(Case::Pascal), ident.span());
-                quote! {<#elem_ident input={#callback_ident} value={#ident} state={state.clone()} />}
+                quote! {<#elem_ident input={#callback_ident} value={#ident} state={(*state).clone()} change={change.clone()} submit={submit.clone()} cancel={cancel.clone()}/>}
+                // quote!{}
             }
             // _ => compile_error!("must specify a single field type, either checkbox, input, textarea or custom")
-            _ => quote! {}
+            _ => quote! {{"error"}}
         };
 
         let field_start = match (self.checkbox, &self.custom) {
@@ -94,6 +106,8 @@ impl ToTokens for FieldOpts {
             #field_start #body #field_end
         };
 
+        println!("{stream}");
+
         tokens.extend(stream)
     }
 }
@@ -104,7 +118,13 @@ impl ToTokens for TraitOpts {
             ast::Data::Struct(fields) => &fields.fields,
             _ => unimplemented!()
         };
+
         let ident = &self.ident;
+
+        let state = match &self.state {
+            Some(name) => syn::Ident::new(name, ident.span()),
+            None => syn::Ident::new("()", ident.span()),
+        };
 
         let field_callback = |field: &FieldOpts| {
             let name = field.ident.clone().unwrap();
@@ -112,7 +132,7 @@ impl ToTokens for TraitOpts {
             quote! {
                 let #callback = {
                     let prev = std::rc::Rc::clone(value);
-                    change.reform(move |#name| std::rc::Rc::new(#ident{#name, ..(*prev).clone()}))
+                    input.reform(move |#name| std::rc::Rc::new(#ident{#name, ..(*prev).clone()}))
                 };
             }
         };
@@ -121,27 +141,47 @@ impl ToTokens for TraitOpts {
         let callbacks = fields.iter().map(field_callback);
         let form_ident = syn::Ident::new(&format!("{}Form", ident), ident.span());
 
+        let cancel = match self.cancel {
+            true => quote! { <cobul::Button color={cobul::Color::Info} light=true click={cancel}> {"Cancel"} </cobul::Button> },
+            false => quote! {}
+        };
+
+        let submit = match self.submit {
+            true => quote! { <cobul::Button color={cobul::Color::Info} click={submit}> {"Submit"} </cobul::Button> },
+            false => quote! {}
+        };
+
         let stream = quote! {
             #[derive(yew::Properties, std::cmp::PartialEq)]
             pub struct Props {
                 pub value: std::rc::Rc<#ident>,
-                pub change: yew::Callback<std::rc::Rc<#ident>>,
+                pub input: yew::Callback<std::rc::Rc<#ident>>,
 
                 #[prop_or_default]
-                pub submit: yew::Callback<std::rc::Rc<#ident>>,
+                pub submit: yew::Callback<()>,
+
+                #[prop_or_default]
+                pub cancel: yew::Callback<()>,
             }
 
             #[yew::function_component(#form_ident)]
             pub fn view(props: &Props) -> yew::Html {
-                let state = yew::use_state(|| #state);
+                let state = yew::use_state(|| #state::default());
 
-                let Props { value, change, submit } = props.clone();
+                let state_c = state.clone();
+                let change = Callback::from(move |new| state_c.set(new));
+
+                let Props { value, input, submit, cancel } = props.clone();
                 let #ident { #(#values),* } = (**value).clone();
 
                 #(#callbacks);*
 
-                yew::html! { <> #(#fields)* </> }
-                // html!{}
+                yew::html! {
+                    <>
+                    #(#fields)*
+                    <cobul::Buttons> #cancel #submit </cobul::Buttons>
+                    </>
+                }
             }
         };
 
