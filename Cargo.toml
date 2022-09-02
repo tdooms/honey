@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 yew = { git = "https://github.com/yewstack/yew.git", rev="421b4e1f608e6d648dcf571157b081fcbd886996", features = ["csr"] }
+honey_derive = { path = "./derive" }
 
 [workspace]
 members = ["derive", "expand"]

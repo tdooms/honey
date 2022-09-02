@@ -1,3 +1,4 @@
+use convert_case::{Case, Casing};
 use darling::{FromMeta, FromDeriveInput, ast, FromField};
 use syn::{AttributeArgs, Field, ItemFn, parse_macro_input};
 use proc_macro2::TokenStream;
@@ -48,39 +49,49 @@ impl ToTokens for FieldOpts {
 
         // Check whether the types are supported
         if self.checkbox && self.ty != syn::parse_str("bool").unwrap() {
-            compile_error!("Checkbox field can only be used with bool");
+            println!("{:?} {:?}", self.ty, syn::parse_str::<syn::Ident>("bool").unwrap());
+            // compile_error!("Checkbox field can only be used with bool");
         }
         if self.input && self.ty != syn::parse_str("String").unwrap() {
-            compile_error!("Input field can only be used with String");
+            // compile_error!("Input field can only be used with String");
         }
         if self.textarea && self.ty != syn::parse_str("String").unwrap() {
-            compile_error!("Textarea field can only be used with String");
-        }
-        if !self.checkbox || !self.textarea || !self.input || !self.custom.is_some() {
-            compile_error!("must specify field type, either checkbox, input, textarea or custom");
+            // compile_error!("Textarea field can only be used with String");
         }
 
-        let field = || {
-            let cb_ident = syn::Ident::new(&format!("{}_cb", ident), ident.span());
-            let elem_ident = syn::Ident::new(ident.to_case(Case::Pascal), ident.span());
-            let
+        let callback_ident = syn::Ident::new(&format!("{}_cb", ident), ident.span());
+
+        let body = match (self.checkbox, self.input, self.textarea, &self.custom) {
+            (true, false, false, None) => quote! {
+                <cobul::Checkbox input={#callback_ident} checked={#ident} label={stringify!(#ident)} />
+            },
+            (false, true, false, None) => quote! {
+                <cobul::Input input={#callback_ident} value={#ident} />
+            },
+            (false, false, true, None) => quote! {
+                <cobul::Textarea input={#callback_ident} value={#ident} />
+            },
+            (false, false, false, Some(custom)) => {
+                let elem_ident = syn::Ident::new(&custom.to_case(Case::Pascal), ident.span());
+                quote! {<#elem_ident input={#callback_ident} value={#ident} state={state.clone()} />}
+            }
+            // _ => compile_error!("must specify a single field type, either checkbox, input, textarea or custom")
+            _ => quote! {}
         };
 
-
-
-
-
-        let body = match self.field {
-            FormFieldKind::Input => quote!{ <cobul::Input input={#cb_ident} value={#ident} /> },
-            FormFieldKind::TextArea => quote!{ <cobul::Textarea input={#cb_ident} value={#ident} /> },
-            FormFieldKind::Checkbox => quote!{ <cobul::Checkbox input={#cb_ident} checked={#ident} label={stringify!(#ident)} /> },
-            FormFieldKind::Custom()
+        let field_start = match (self.checkbox, &self.custom) {
+            (true, None) => quote! { <cobul::simple::Field> },
+            (false, None) => quote! { <cobul::simple::Field label={stringify!(#ident)}> },
+            (_, Some(_)) => quote! {},
         };
 
-        let label =
+        let field_end = match &self.custom {
+            None => quote! { </cobul::simple::Field> },
+            _ => quote! {},
+        };
 
         let stream = quote! {
-            <cobul::simple::Field label={stringify!(#ident)}> #body </cobul::simple::Field>
+            #field_start #body #field_end
         };
 
         tokens.extend(stream)
@@ -93,22 +104,21 @@ impl ToTokens for TraitOpts {
             ast::Data::Struct(fields) => &fields.fields,
             _ => unimplemented!()
         };
-
         let ident = &self.ident;
-        let values = fields.iter().map(|field| field.ident.clone());
 
-        let callbacks = fields.iter().map(|field| {
-            let name = field.ident.clone();
-            let callback = syn::Ident::new(&format!("{}_cb", name.as_ref().unwrap()), name.span());
-            quote!{
+        let field_callback = |field: &FieldOpts| {
+            let name = field.ident.clone().unwrap();
+            let callback = syn::Ident::new(&format!("{}_cb", name), name.span());
+            quote! {
                 let #callback = {
                     let prev = std::rc::Rc::clone(value);
                     change.reform(move |#name| std::rc::Rc::new(#ident{#name, ..(*prev).clone()}))
                 };
             }
-        });
+        };
 
-        println!("{}", quote!(<> #(#fields)* </>));
+        let values = fields.iter().map(|field| field.ident.clone());
+        let callbacks = fields.iter().map(field_callback);
         let form_ident = syn::Ident::new(&format!("{}Form", ident), ident.span());
 
         let stream = quote! {
@@ -123,6 +133,8 @@ impl ToTokens for TraitOpts {
 
             #[yew::function_component(#form_ident)]
             pub fn view(props: &Props) -> yew::Html {
+                let state = yew::use_state(|| #state);
+
                 let Props { value, change, submit } = props.clone();
                 let #ident { #(#values),* } = (**value).clone();
 

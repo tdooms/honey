@@ -1,9 +1,9 @@
-use std::rc::Rc;
+pub use honey_derive::*;
 
 #[derive(yew::Properties, PartialEq)]
-pub struct CustomProps<T, S = ()> {
-    pub value: Rc<T>,
-    pub input: yew::Callback<Rc<T>>,
+pub struct CustomProps<T: PartialEq, S: PartialEq> {
+    pub value: T,
+    pub input: yew::Callback<T>,
     pub error: Option<String>,
-    pub state: Option<S>
+    pub state: S
 }
