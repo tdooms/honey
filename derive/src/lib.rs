@@ -1,9 +1,8 @@
 use convert_case::{Case, Casing};
 use darling::{FromMeta, FromDeriveInput, ast, FromField};
-use syn::{AttributeArgs, Field, ItemFn, parse_macro_input};
+use syn::{parse_macro_input};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
-use syn::spanned::Spanned;
 
 #[derive(FromMeta)]
 struct MacroArgs {
@@ -43,7 +42,7 @@ struct TraitOpts {
     submit: bool,
 
     #[darling(default)]
-    cancel: bool
+    cancel: bool,
 }
 
 #[proc_macro_derive(Form, attributes(form))]
@@ -84,16 +83,19 @@ impl ToTokens for FieldOpts {
             },
             (false, false, false, false, Some(custom)) => {
                 let elem_ident = syn::Ident::new(&custom.to_case(Case::Pascal), ident.span());
-                quote! {<#elem_ident input={#callback_ident} value={#ident} state={(*state).clone()} change={change.clone()} submit={submit.clone()} cancel={cancel.clone()}/>}
-                // quote!{}
+                quote! {
+                    <#elem_ident input={#callback_ident} value={#ident} state={(*state).clone()}
+                    change={change.clone()} submit={submit.clone()} cancel={cancel.clone()}
+                    error={errors.get(stringify!(#ident)).cloned()} />
+                }
             }
             // _ => compile_error!("must specify a single field type, either checkbox, input, textarea or custom")
             _ => quote! {{"error"}}
         };
 
         let field_start = match (self.checkbox, &self.custom) {
-            (true, None) => quote! { <cobul::simple::Field> },
-            (false, None) => quote! { <cobul::simple::Field label={stringify!(#ident)}> },
+            (true, None) => quote! { <cobul::simple::Field help={errors.get(stringify!(#ident)).cloned()}> },
+            (false, None) => quote! { <cobul::simple::Field label={stringify!(#ident)} help={errors.get(stringify!(#ident)).cloned()}> },
             (_, Some(_)) => quote! {},
         };
 
@@ -105,8 +107,6 @@ impl ToTokens for FieldOpts {
         let stream = quote! {
             #field_start #body #field_end
         };
-
-        println!("{stream}");
 
         tokens.extend(stream)
     }
@@ -167,6 +167,14 @@ impl ToTokens for TraitOpts {
             #[yew::function_component(#form_ident)]
             pub fn view(props: &Props) -> yew::Html {
                 let state = yew::use_state(|| #state::default());
+
+                let errors: std::collections::HashMap<_, _> = validator::Validate::validate(&*props.value)
+                    .err()
+                    .unwrap_or_default()
+                    .field_errors()
+                    .into_iter()
+                    .map(|(field, vec)| (field.to_owned(), vec.first().unwrap().to_string()))
+                    .collect();
 
                 let state_c = state.clone();
                 let change = Callback::from(move |new| state_c.set(new));

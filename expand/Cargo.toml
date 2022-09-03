@@ -10,3 +10,4 @@ honey = { path = ".." }
 yew = { git = "https://github.com/yewstack/yew.git", rev="421b4e1f608e6d648dcf571157b081fcbd886996", features = ["csr"] }
 cobul = { git = "https://github.com/tdooms/cobul.git", features = ["extensions", "simple"] }
 ywt = { git = "https://github.com/tdooms/ywt.git" }
+validator = { version = "0.16", features = ["derive"] }

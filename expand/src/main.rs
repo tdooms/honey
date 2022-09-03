@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use validator::ValidationError;
 use honey::{Form, CustomProps};
 use yew::*;
 
@@ -11,20 +12,29 @@ pub struct QuizState {
 pub fn image_input(props: &CustomProps<String, QuizState>) -> Html {
     html! {
         <>
-        <cobul::Button click={props.change.reform(|_| QuizState {expanded: true})} />
+        <cobul::Button click={props.change.reform(|_| QuizState {expanded: true})} > {"expand"} </cobul::Button>
         <p> {props.state.expanded} </p>
         </>
     }
 }
 
-#[derive(Form, PartialEq, Clone, Debug)]
+fn must_be_true(pred: &bool) -> Result<(), ValidationError> {
+    pred.then(|| ()).ok_or(ValidationError::new(""))
+}
+
+#[derive(Form, PartialEq, Clone, Debug, validator::Validate)]
 #[form(state = "QuizState")]
 pub struct Quiz {
     #[form(input)]
     pub title: String,
 
-    #[form(hidden)]
+    #[validate(custom(function = "must_be_true", message = "Must be true"))]
+    #[form(checkbox)]
     pub public: bool,
+
+    #[validate(length(min = 1, message = "Must be older than 10"))]
+    #[form(input)]
+    pub age: String,
 
     #[form(custom = "image_input")]
     pub image: String,
@@ -34,6 +44,7 @@ pub struct Quiz {
 pub fn app() -> Html {
     let quiz = Quiz {
         title: "title".to_string(),
+        age: 19.to_string(),
         public: true,
         image: "".to_owned(),
     };
