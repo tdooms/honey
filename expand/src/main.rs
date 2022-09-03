@@ -23,7 +23,7 @@ fn must_be_true(pred: &bool) -> Result<(), ValidationError> {
 }
 
 #[derive(Form, PartialEq, Clone, Debug, validator::Validate)]
-#[form(state = "QuizState")]
+#[form(state = "QuizState", submit, cancel)]
 pub struct Quiz {
     #[form(input)]
     pub title: String,
@@ -52,17 +52,20 @@ pub fn app() -> Html {
     let state = use_state(|| Rc::new(quiz));
     let input = ywt::callback!(state; move |quiz| state.set(quiz));
 
+    let submit = ywt::callback!(|_| log::info!("submit"));
+
     let debug = format!("{:?}", &*state);
 
     html! {
         <cobul::Container>
-        <QuizForm value={(*state).clone()} {input} />
+        <QuizForm value={(*state).clone()} {input} {submit}/>
         <p> {debug} </p>
         </cobul::Container>
     }
 }
 
 fn main() {
+    wasm_logger::init(wasm_logger::Config::default());
     Renderer::<App>::new().render();
 }
 

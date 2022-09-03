@@ -43,6 +43,9 @@ struct TraitOpts {
 
     #[darling(default)]
     cancel: bool,
+
+    #[darling(default)]
+    enter: bool,
 }
 
 #[proc_macro_derive(Form, attributes(form))]
@@ -141,6 +144,21 @@ impl ToTokens for TraitOpts {
         let callbacks = fields.iter().map(field_callback);
         let form_ident = syn::Ident::new(&format!("{}Form", ident), ident.span());
 
+        let enter_cb = match self.enter {
+            true => quote! {
+                let submit_c = submit.clone();
+                let onkeypress = Callback::from(move |e: KeyboardEvent| {
+                    if e.key() == "Enter" { submit_c.emit(()) }
+                });
+            },
+            false => quote!{}
+        };
+
+        let enter_div = match self.enter {
+            true => quote! { <div onkeypress={onkeypress}>},
+            false => quote! { <div> }
+        };
+
         let cancel = match self.cancel {
             true => quote! { <cobul::Button color={cobul::Color::Info} light=true click={cancel}> {"Cancel"} </cobul::Button> },
             false => quote! {}
@@ -182,13 +200,15 @@ impl ToTokens for TraitOpts {
                 let Props { value, input, submit, cancel } = props.clone();
                 let #ident { #(#values),* } = (**value).clone();
 
+                #enter_cb
+
                 #(#callbacks);*
 
                 yew::html! {
-                    <>
+                    #enter_div
                     #(#fields)*
                     <cobul::Buttons> #cancel #submit </cobul::Buttons>
-                    </>
+                    </div>
                 }
             }
         };
