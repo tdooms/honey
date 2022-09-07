@@ -123,10 +123,11 @@ impl ToTokens for TraitOpts {
         };
 
         let ident = &self.ident;
+        let state = self.state.as_ref().map(|name| syn::Ident::new(name, ident.span()));
 
-        let state = match &self.state {
-            Some(name) => syn::Ident::new(name, ident.span()),
-            None => syn::Ident::new("()", ident.span()),
+        let state_decl = match state {
+            Some(state) => quote! { let state = yew::use_state(|| #state::default()); },
+            None => quote! { let state = yew::use_state(|| ()); },
         };
 
         let field_callback = |field: &FieldOpts| {
@@ -151,7 +152,7 @@ impl ToTokens for TraitOpts {
                     if e.key() == "Enter" { submit_c.emit(()) }
                 });
             },
-            false => quote!{}
+            false => quote! {}
         };
 
         let enter_div = match self.enter {
@@ -184,7 +185,7 @@ impl ToTokens for TraitOpts {
 
             #[yew::function_component(#form_ident)]
             pub fn view(props: &Props) -> yew::Html {
-                let state = yew::use_state(|| #state::default());
+                #state_decl
 
                 let errors: std::collections::HashMap<_, _> = validator::Validate::validate(&*props.value)
                     .err()
