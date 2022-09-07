@@ -9,13 +9,14 @@ pub struct QuizState {
 }
 
 #[function_component(ImageInput)]
-pub fn image_input(props: &CustomProps<String, QuizState>) -> Html {
-    html! {
-        <>
-        <cobul::Button click={props.change.reform(|_| QuizState {expanded: true})} > {"expand"} </cobul::Button>
-        <p> {props.state.expanded} </p>
-        </>
-    }
+pub fn image_input(props: &CustomProps<String, ()>) -> Html {
+    // html! {
+    //     <>
+    //     <cobul::Button click={props.change.reform(|_| QuizState {expanded: true})} > {"expand"} </cobul::Button>
+    //     <p> {props.state.expanded} </p>
+    //     </>
+    // }
+    html!{}
 }
 
 fn must_be_true(pred: &bool) -> Result<(), ValidationError> {
@@ -23,7 +24,7 @@ fn must_be_true(pred: &bool) -> Result<(), ValidationError> {
 }
 
 #[derive(Form, PartialEq, Clone, Debug, validator::Validate)]
-#[form(state = "QuizState", submit, cancel)]
+#[form(submit, cancel)]
 pub struct Quiz {
     #[form(input)]
     pub title: String,
