@@ -37,6 +37,10 @@ pub struct Quiz {
     #[form(input)]
     pub age: String,
 
+    #[validate(email(message = "Must be a valid email"))]
+    #[form(input)]
+    pub email: String,
+
     #[form(custom = "image_input")]
     pub image: String,
 }
@@ -48,6 +52,7 @@ pub fn app() -> Html {
         age: 19.to_string(),
         public: true,
         image: "".to_owned(),
+        email: "email".to_string(),
     };
 
     let state = use_state(|| Rc::new(quiz));

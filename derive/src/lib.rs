@@ -73,16 +73,18 @@ impl ToTokens for FieldOpts {
 
         let callback_ident = syn::Ident::new(&format!("{}_cb", ident), ident.span());
 
+        let color = quote!{ color={errors.get(stringify!(#ident)).map(|_| cobul::Color::Danger)} };
+
         let body = match (hidden, checkbox, input, textarea, &custom) {
             (true, false, false, false, None) => quote! {},
             (false, true, false, false, None) => quote! {
-                <cobul::Checkbox input={#callback_ident} checked={#ident} label={stringify!(#ident)} />
+                <cobul::Checkbox input={#callback_ident} checked={#ident} label={stringify!(#ident)} #color />
             },
             (false, false, true, false, None) => quote! {
-                <cobul::Input input={#callback_ident} value={#ident} />
+                <cobul::Input input={#callback_ident} value={#ident} #color />
             },
             (false, false, false, true, None) => quote! {
-                <cobul::Textarea input={#callback_ident} value={#ident} />
+                <cobul::Textarea input={#callback_ident} value={#ident} #color />
             },
             (false, false, false, false, Some(custom)) => {
                 let elem_ident = syn::Ident::new(&custom.to_case(Case::Pascal), ident.span());
